@@ -90,3 +90,7 @@ test_*.py
 
 
 tests/testdocs/*
+
+# PyCharm
+
+.idea/
