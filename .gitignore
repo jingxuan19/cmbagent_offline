@@ -94,3 +94,7 @@ tests/testdocs/*
 # PyCharm
 
 .idea/
+
+# Ignore all notebooks at all levels
+
+**/*.ipynb
