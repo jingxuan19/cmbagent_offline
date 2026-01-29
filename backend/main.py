@@ -1051,6 +1051,7 @@ async def _calculate_total_cost(work_dir: str, mode: str = None) -> float:
     Calculate total cost from cost report files.
 
     For planning modes, aggregates costs from planning/ and control/ subdirectories.
+    For enhance-input, aggregates OCR costs and summarization costs.
 
     Args:
         work_dir: Backend work directory path
@@ -1075,6 +1076,11 @@ async def _calculate_total_cost(work_dir: str, mode: str = None) -> float:
         # Standard one-shot mode: cost/ at top level
         cost_dirs.append(os.path.join(work_dir, 'cost'))
 
+    # For enhance-input, also look in summaries/doc_*/cost/
+    if mode == 'enhance-input':
+        summaries_pattern = os.path.join(work_dir, 'summaries', 'doc_*', 'cost')
+        cost_dirs.extend(glob.glob(summaries_pattern))
+
     for cost_dir in cost_dirs:
         if not os.path.exists(cost_dir):
             continue
@@ -1098,6 +1104,19 @@ async def _calculate_total_cost(work_dir: str, mode: str = None) -> float:
 
             except Exception as e:
                 logger.warning(f"Failed to parse cost file {cost_file}: {e}")
+
+    # For enhance-input and OCR, also include OCR costs
+    if mode in ('enhance-input', 'ocr'):
+        ocr_cost_file = os.path.join(work_dir, 'ocr_cost.json')
+        if os.path.exists(ocr_cost_file):
+            try:
+                with open(ocr_cost_file, 'r', encoding='utf-8') as f:
+                    ocr_data = json.loads(f.read())
+                ocr_cost = ocr_data.get('total_cost_usd', 0)
+                if ocr_cost and isinstance(ocr_cost, (int, float)):
+                    total_cost += ocr_cost
+            except Exception as e:
+                logger.warning(f"Failed to parse OCR cost file: {e}")
 
     return total_cost
 
