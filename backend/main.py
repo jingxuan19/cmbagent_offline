@@ -1621,6 +1621,7 @@ async def execute_cmbagent_task(websocket: WebSocket, task_id: str, task: str, c
                 logger.warning(f"Failed to register files in Firestore: {e}")
 
         # Calculate and store total cost from cost reports
+        total_cost = 0.0
         try:
             total_cost = await _calculate_total_cost(task_work_dir, mode)
             if total_cost > 0:
@@ -1634,6 +1635,7 @@ async def execute_cmbagent_task(websocket: WebSocket, task_id: str, task: str, c
             "type": "result",
             "data": {
                 "execution_time": execution_time,
+                "total_cost": total_cost,
                 "chat_history": getattr(results, 'chat_history', []) if hasattr(results, 'chat_history') else [],
                 "final_context": getattr(results, 'final_context', {}) if hasattr(results, 'final_context') else {},
                 "work_dir": task_work_dir,
