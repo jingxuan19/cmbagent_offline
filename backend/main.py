@@ -79,7 +79,7 @@ except ImportError as e:
     def is_local_dev():
         return True
 
-app = FastAPI(title="CMBAgent API", version="1.0.0")
+app = FastAPI(title="AIR API", version="1.0.0")
 
 # Configure CORS
 app.add_middleware(
@@ -183,7 +183,7 @@ class StreamCapture:
 
 @app.get("/")
 async def root():
-    return {"message": "CMBAgent API is running"}
+    return {"message": "AIR API is running"}
 
 @app.get("/api/health")
 async def health_check():
@@ -915,7 +915,7 @@ async def websocket_endpoint(websocket: WebSocket, task_id: str, token: Optional
                 # Send initial status
                 await websocket.send_json({
                     "type": "status",
-                    "message": "Starting CMBAgent execution..."
+                    "message": "Starting AIR execution..."
                 })
 
                 # Check if remote execution is requested
@@ -1328,10 +1328,12 @@ async def sync_backend_files_to_frontend(
 
     # Sync Denario project files
     denario_modes = {'idea-fast', 'literature-search', 'methods-fast', 'paper', 'review', 'keywords'}
-    if mode in denario_modes and config and user_id:
+    if mode in denario_modes and config:
         project_name = config.get("projectName", "default")
-        base_work_dir = os.path.dirname(work_dir)  # Go up from {base}/{user_id}/{task_id}
-        project_dir = os.path.join(base_work_dir, "denario", project_name)
+        # work_dir is task_work_dir = {base}/{user_id}/{task_id}
+        # Go up to {base}/{user_id} then into denario/{project_name}
+        user_work_dir = os.path.dirname(work_dir)
+        project_dir = os.path.join(user_work_dir, "denario", project_name)
         if os.path.exists(project_dir):
             logger.info(f"Syncing Denario project directory: {project_dir}")
             for root, _, files in os.walk(project_dir):
@@ -1396,19 +1398,31 @@ def _build_denario_keys():
     return keys
 
 
-def _get_denario_project_dir(base_work_dir: str, user_id: str, project_name: str) -> str:
-    """Get or create persistent Denario project directory."""
-    project_dir = os.path.join(base_work_dir, user_id, "denario", project_name)
+def _get_denario_project_dir(user_work_dir: str, project_name: str) -> str:
+    """Get or create persistent Denario project directory.
+
+    Args:
+        user_work_dir: The user's work directory ({base_work_dir}/{user_id}).
+        project_name: The project name chosen by the user.
+
+    Returns: {user_work_dir}/denario/{project_name}
+    """
+    project_dir = os.path.join(user_work_dir, "denario", project_name)
     os.makedirs(project_dir, exist_ok=True)
     return project_dir
 
 
 def _save_data_description(project_dir: str, text: str, iteration: int = 0):
-    """Save data description to Denario's expected location."""
-    input_dir = os.path.join(project_dir, "Project0", f"Iteration{iteration}", "input_files")
+    """Save data description to Denario's expected location.
+
+    Denario expects: {project_dir}/Iteration{N}/input_files/data_description.md
+    """
+    input_dir = os.path.join(project_dir, f"Iteration{iteration}", "input_files")
     os.makedirs(input_dir, exist_ok=True)
-    with open(os.path.join(input_dir, "data_description.md"), "w") as f:
+    file_path = os.path.join(input_dir, "data_description.md")
+    with open(file_path, "w") as f:
         f.write(text)
+    logger.info(f"Saved data description to: {file_path}")
 
 
 async def execute_cmbagent_task(websocket: WebSocket, task_id: str, task: str, config: Dict[str, Any], user: Optional[Any] = None, custom_executor: Optional[Any] = None):
@@ -1463,7 +1477,7 @@ async def execute_cmbagent_task(websocket: WebSocket, task_id: str, task: str, c
         # Send status update
         await websocket.send_json({
             "type": "status",
-            "message": "Initializing CMBAgent..."
+            "message": "Initializing AIR..."
         })
 
         # Update task status to running in Firestore
@@ -1512,7 +1526,7 @@ async def execute_cmbagent_task(websocket: WebSocket, task_id: str, task: str, c
         
         await websocket.send_json({
             "type": "output",
-            "data": f"🚀 Starting CMBAgent in {mode.replace('-', ' ').title()} mode"
+            "data": f"🚀 Starting AIR in {mode.replace('-', ' ').title()} mode"
         })
         
         await websocket.send_json({
@@ -1700,8 +1714,13 @@ async def execute_cmbagent_task(websocket: WebSocket, task_id: str, task: str, c
                 elif mode == "idea-fast":
                     from denario.langgraph_agents.modules import idea_LG
                     project_name = config.get("projectName", "default")
-                    project_dir = _get_denario_project_dir(work_dir, user_id, project_name)
-                    _save_data_description(project_dir, task, config.get("projectIteration", 0))
+                    project_dir = _get_denario_project_dir(work_dir, project_name)
+                    project_iteration = config.get("projectIteration", 0)
+                    print(f"Denario idea-fast: project_dir={project_dir}")
+                    _save_data_description(project_dir, task, project_iteration)
+                    # Verify the file was written
+                    expected_file = os.path.join(project_dir, f"Iteration{project_iteration}", "input_files", "data_description.md")
+                    print(f"Data description file exists: {os.path.exists(expected_file)} at {expected_file}")
                     results = idea_LG(
                         project_dir=project_dir,
                         keys=_build_denario_keys(),
@@ -1712,7 +1731,7 @@ async def execute_cmbagent_task(websocket: WebSocket, task_id: str, task: str, c
                 elif mode == "literature-search":
                     from denario.langgraph_agents.modules import literature_LG
                     project_name = config.get("projectName", "default")
-                    project_dir = _get_denario_project_dir(work_dir, user_id, project_name)
+                    project_dir = _get_denario_project_dir(work_dir, project_name)
                     if task.strip():
                         _save_data_description(project_dir, task, config.get("projectIteration", 0))
                     results = literature_LG(
@@ -1725,7 +1744,7 @@ async def execute_cmbagent_task(websocket: WebSocket, task_id: str, task: str, c
                 elif mode == "methods-fast":
                     from denario.langgraph_agents.modules import methods_LG
                     project_name = config.get("projectName", "default")
-                    project_dir = _get_denario_project_dir(work_dir, user_id, project_name)
+                    project_dir = _get_denario_project_dir(work_dir, project_name)
                     if task.strip():
                         _save_data_description(project_dir, task, config.get("projectIteration", 0))
                     results = methods_LG(
@@ -1738,7 +1757,7 @@ async def execute_cmbagent_task(websocket: WebSocket, task_id: str, task: str, c
                     from denario.langgraph_agents.modules import paper_LG
                     from denario.tools import Journal
                     project_name = config.get("projectName", "default")
-                    project_dir = _get_denario_project_dir(work_dir, user_id, project_name)
+                    project_dir = _get_denario_project_dir(work_dir, project_name)
                     journal = getattr(Journal, config.get("journal", "NONE"), Journal.NONE)
                     results = paper_LG(
                         project_dir=project_dir,
@@ -1752,7 +1771,7 @@ async def execute_cmbagent_task(websocket: WebSocket, task_id: str, task: str, c
                 elif mode == "review":
                     from denario.langgraph_agents.modules import reviewer_LG
                     project_name = config.get("projectName", "default")
-                    project_dir = _get_denario_project_dir(work_dir, user_id, project_name)
+                    project_dir = _get_denario_project_dir(work_dir, project_name)
                     results = reviewer_LG(
                         project_dir=project_dir,
                         keys=_build_denario_keys(),
@@ -1895,7 +1914,7 @@ async def execute_cmbagent_task(websocket: WebSocket, task_id: str, task: str, c
                     logger.info(f"Cleaned up server-side directory: {d}")
 
     except Exception as e:
-        error_msg = f"Error executing CMBAgent task: {str(e)}"
+        error_msg = f"Error executing AIR task: {str(e)}"
         print(error_msg)
 
         # Update task status to failed in Firestore
