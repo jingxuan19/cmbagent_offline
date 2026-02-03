@@ -10,21 +10,6 @@ The system uses a two-phase approach:
 - **Planning**: A planner and plan reviewer design task execution strategies
 - **Control**: Step-by-step execution where sub-tasks are handed to specialized agents
 
-## Architecture: Remote Code Execution
-
-CMBAgent uses a **remote execution architecture** where:
-
-- **Server**: Lightweight orchestration only - runs AG2 agents, manages conversations, routes messages. No heavy scientific dependencies required.
-- **Client (user's machine)**: Executes all generated code in an isolated virtual environment. Packages are installed on-demand by the installer agent.
-
-This separation means:
-- The server can be deployed on minimal infrastructure
-- Scientific computation happens on the user's local machine with full access to their data
-- The client's venv installs packages as needed (numpy, scipy, matplotlib, etc.)
-
-### Key Files for Remote Execution
-- `cmbagent/execution/remote_executor.py` - `RemoteWebSocketCodeExecutor` sends code to client
-
 ## Key Components
 
 ### Core Python Package (`cmbagent/`)
