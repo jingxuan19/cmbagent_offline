@@ -134,6 +134,14 @@ default_agents_llm_model ={
 
 default_agent_llm_configs = {}
 
+# Local / OSS model endpoints (model name -> base URL)
+# Add your vLLM or other OpenAI-compatible servers here.
+# Set the corresponding environment variables (e.g. GPT_OSS_120B_URL).
+local_llm_urls = {
+    "gpt-oss-120b": os.getenv("GPT_OSS_120B_URL"),
+    # "gpt-oss-20b": os.getenv("GPT_OSS_20B_URL"),
+}
+
 def get_api_keys_from_env():
     api_keys = {
         "OPENAI" : os.getenv("OPENAI_API_KEY"),
@@ -142,6 +150,7 @@ def get_api_keys_from_env():
         "MISTRAL" : os.getenv("MISTRAL_API_KEY"),
     }
     return api_keys
+
 
 def get_model_config(model, api_keys):
     # Allow passing a full config dict (e.g. for local LLM with base_url)
@@ -154,17 +163,19 @@ def get_model_config(model, api_keys):
         "api_type": None
     }
 
-    # Local LLM: use LOCAL_LLM_BASE_URL if set (e.g. http://localhost:8010/v1)
-    local_base_url = os.getenv("LOCAL_LLM_BASE_URL")
-    if local_base_url:
+    # Check local_llm_urls registry first
+    local_url = local_llm_urls.get(model)
+    if local_url:
         config.update({
-            "base_url": local_base_url.rstrip("/"),
+            "base_url": local_url.rstrip("/"),
             "api_key": os.getenv("LOCAL_LLM_API_KEY", "EMPTY"),
             "api_type": "openai",
+            "price": [0.0, 0.0],
         })
         return config
 
-    if 'o3' in model:
+    # Known cloud providers
+    if 'o3' in model or 'o1' in model:
         config.update({
             "reasoning_effort": "medium",
             "api_key": api_keys["OPENAI"],
@@ -305,3 +316,37 @@ def fetch_local_model_name(base_url: str, api_key: str) -> str:
     if not models:
         raise RuntimeError("No models found at endpoint")
     return models[0]["id"]
+
+
+def get_local_llm_config(base_url=None, api_key=None, model=None):
+    """
+    Build a config dict for a local/OSS LLM server (e.g. vLLM).
+
+    Reads from environment variables by default:
+        LOCAL_LLM_BASE_URL  – server URL  (e.g. http://orion:8010/v1)
+        LOCAL_LLM_API_KEY   – API key     (default: "EMPTY")
+
+    If ``model`` is not given, the model name is auto-discovered
+    from the server's /models endpoint.
+
+    Returns:
+        dict ready to pass as ``engineer_model`` etc.
+    """
+    base_url = (base_url or os.getenv("LOCAL_LLM_BASE_URL", "")).rstrip("/")
+    if not base_url:
+        raise ValueError(
+            "No local LLM URL provided. "
+            "Set LOCAL_LLM_BASE_URL or pass base_url explicitly."
+        )
+    api_key = api_key or os.getenv("LOCAL_LLM_API_KEY", "EMPTY")
+
+    if model is None:
+        model = fetch_local_model_name(base_url, api_key)
+
+    return {
+        "model": model,
+        "api_key": api_key,
+        "api_type": "openai",
+        "base_url": base_url,
+        "price": [0.0, 0.0],
+    }
