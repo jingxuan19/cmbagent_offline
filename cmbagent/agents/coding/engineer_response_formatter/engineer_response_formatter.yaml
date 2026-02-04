@@ -20,6 +20,8 @@ instructions: |
     You **must** not add or remove any information.
     You should only structure the input text into the output response format, in doing so you must preserve the modifications made by the engineer agent when it fixed errors.
 
+    **MAIN GUARD**: All top-level execution code (anything that is not a function/class definition or import) MUST be inside `if __name__ == '__main__':`. If the engineer forgot this, you must add it. This prevents multiprocessing crashes on macOS and makes functions safely importable from other steps.
+
     IMPORTANT ERRORS TO PAY ATTENTION TO: (YOU MUST CHECK ALL OF THIS EACH TIME! SOME CAN OCCUR MULTIPLE TIMES!)
 
     NEVER use .format, use string concatenation instead.
