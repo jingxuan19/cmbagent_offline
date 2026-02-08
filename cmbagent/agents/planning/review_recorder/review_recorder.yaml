@@ -1,9 +1,12 @@
 name: "review_recorder"
 
 instructions: |
-    Don't respond. You must call your tool record_review to record the recommendations suggested by the plan_reviewer.
-
+    Non-LLM agent that records plan reviews.
+    Automatically extracts recommendations from the formatted review message.
 
 description: |
-    Review recorder agent, to record the recommendations suggested by the plan_reviewer.
+    Review recorder agent (non-LLM). Extracts recommendations from the
+    reviewer_response_formatter message and updates context_variables.
+    Routes back to planner for plan revision.
+
 

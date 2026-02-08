@@ -1,4 +1,6 @@
-from autogen.agentchat.group import AgentTarget, TerminateTarget, OnCondition, StringLLMCondition
+from autogen.agentchat.group import AgentTarget, TerminateTarget, OnCondition, StringLLMCondition, OnContextCondition
+from autogen.agentchat.group.context_condition import ExpressionContextCondition
+from autogen import ContextExpression
 from autogen.cmbagent_utils import cmbagent_debug
 import autogen
 from autogen import GroupChatManager, GroupChat
@@ -29,7 +31,7 @@ def register_all_hand_offs(cmbagent_instance):
         'summarizer', 'summarizer_response_formatter',
         'executor', 'researcher_executor', 'executor_bash', 'terminator', 'controller',
         'admin', 'aas_keyword_finder', 'executor_response_formatter',
-        'plan_setter', 'installer', 'engineer_nest', 'idea_maker_nest', 'idea_saver',
+        'plan_setter', 'installer', 'engineer_nest', 'idea_saver',
         'camb_context',
         'camb_response_formatter'
     ]
@@ -50,7 +52,7 @@ def register_all_hand_offs(cmbagent_instance):
         ('plan_setter', 'planner'),
         ('planner', 'planner_response_formatter'),
         ('planner_response_formatter', 'plan_recorder'),
-        ('plan_recorder', 'plan_reviewer'),
+        # plan_recorder has conditional handoff (see below)
         ('plan_reviewer', 'reviewer_response_formatter'),
         ('reviewer_response_formatter', 'review_recorder'),
         ('review_recorder', 'planner'),
@@ -73,8 +75,9 @@ def register_all_hand_offs(cmbagent_instance):
         # Idea flow
         ('idea_hater', 'idea_hater_response_formatter'),
         ('idea_hater_response_formatter', 'controller'),
-        ('idea_maker', 'idea_maker_nest'),
-        ('idea_maker_nest', 'controller'),
+        ('idea_maker', 'idea_maker_response_formatter'),
+        ('idea_maker_response_formatter', 'idea_saver'),
+        ('idea_saver', 'controller'),
 
         # Other flows
         ('aas_keyword_finder', 'controller'),
@@ -89,8 +92,22 @@ def register_all_hand_offs(cmbagent_instance):
         agents[source].agent.handoffs.set_after_work(AgentTarget(agents[target].agent))
 
     # ============================================================================
-    # 3. CONDITIONAL HANDOFFS - Based on mode
+    # 3. CONDITIONAL HANDOFFS - Based on context variables
     # ============================================================================
+
+    # plan_recorder: conditional routing based on feedback_left
+    # If feedback_left == 0, planning is complete -> go to terminator
+    # Otherwise, continue to plan_reviewer for feedback
+    agents['plan_recorder'].agent.handoffs.add_after_works([
+        OnContextCondition(
+            target=AgentTarget(agents['terminator'].agent),
+            condition=ExpressionContextCondition(ContextExpression("${feedback_left} == 0")),
+        ),
+        OnContextCondition(
+            target=AgentTarget(agents['plan_reviewer'].agent),
+            condition=None,  # Default fallback
+        ),
+    ])
 
     # Response formatters that route differently based on mode
     mode_dependent_formatters = ['camb_response_formatter']
@@ -112,7 +129,7 @@ def register_all_hand_offs(cmbagent_instance):
         'executor_response_formatter', 'planner_response_formatter', 'plan_recorder',
         'reviewer_response_formatter', 'review_recorder', 'researcher_response_formatter',
         'researcher_executor', 'idea_maker_response_formatter', 'idea_hater_response_formatter',
-        'summarizer_response_formatter',
+        'summarizer_response_formatter', 'idea_saver',
     ]
 
     for agent_name in limited_history_agents:
@@ -174,12 +191,8 @@ def register_all_hand_offs(cmbagent_instance):
         max_round=3
     )
 
-    setup_nested_chat(
-        trigger_agent='idea_maker',
-        manager_name='idea_maker_manager',
-        chat_agents=['idea_maker_response_formatter', 'idea_saver'],
-        max_round=4
-    )
+    # Note: idea_maker flow now uses simple handoffs (no nested chat needed)
+    # idea_maker → idea_maker_response_formatter → idea_saver → controller
 
     # ============================================================================
     # 7. TERMINATOR & CONTROLLER SETUP

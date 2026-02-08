@@ -125,6 +125,11 @@ def one_shot(
     work_dir = os.path.expanduser(work_dir)
     work_dir = Path(work_dir).expanduser().resolve()
 
+    # Update custom executor's work_dir to match the actual work directory
+    # This ensures files are synced to the correct path on the frontend
+    if custom_executor is not None:
+        custom_executor.work_dir = str(work_dir)
+
     if api_keys is None:
         api_keys = get_api_keys_from_env()
 

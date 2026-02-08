@@ -1,13 +1,11 @@
 name: "idea_saver"
 
 instructions: |
-    Don't respond. You must call your tool record_ideas to record the idea.
-    This tool call collects:             
-    - ideas (list): The complete set of ideas to be recorded. Unaltered, as it is, preserve capitalization and ponctuation. Only selected ideas should be recorded.
-
-
+    Non-LLM agent that saves ideas to a JSON file.
+    Automatically parses ideas from the formatted message.
 
 description: |
-    Idea saver agent, to record the idea.
+    Idea saver agent (non-LLM). Parses ideas from the
+    idea_maker_response_formatter message and saves them to a JSON file.
 
 

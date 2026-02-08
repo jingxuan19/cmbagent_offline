@@ -12,6 +12,10 @@ import copy
 import datetime
 import pickle
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..execution.remote_executor import RemoteWebSocketCodeExecutor
 
 from ..agents.planning.planner_response_formatter.planner_response_formatter import save_final_plan
 from ..utils import (
@@ -54,6 +58,46 @@ def clean_work_dir(work_dir):
     import shutil
     if os.path.exists(work_dir):
         shutil.rmtree(work_dir)
+
+
+def write_file_with_sync(
+    filepath: str,
+    content: str,
+    work_dir: str,
+    custom_executor: "RemoteWebSocketCodeExecutor | None" = None,
+    encoding: str = "utf-8"
+) -> None:
+    """Write a file locally and optionally sync to frontend.
+
+    When a custom_executor is provided (remote mode), the file is also
+    sent to the frontend via WebSocket.
+
+    Parameters
+    ----------
+    filepath : str
+        Absolute path to write the file
+    content : str
+        File content to write
+    work_dir : str
+        Base work directory (used to compute relative path for frontend)
+    custom_executor : RemoteWebSocketCodeExecutor, optional
+        If provided, also sends the file to the frontend
+    encoding : str
+        File encoding (default: utf-8)
+    """
+    # Always write locally (backend may need it for subsequent operations)
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    with open(filepath, 'w', encoding=encoding) as f:
+        f.write(content)
+
+    # If remote mode, also send to frontend
+    if custom_executor is not None:
+        try:
+            # Compute relative path from work_dir
+            rel_path = os.path.relpath(filepath, work_dir)
+            custom_executor.send_file(rel_path, content, encoding)
+        except Exception as e:
+            print(f"Warning: Failed to sync file to frontend: {e}")
 
 
 def deep_research(
@@ -177,6 +221,11 @@ def deep_research(
         planning_dir = Path(work_dir).expanduser().resolve() / "planning"
         planning_dir.mkdir(parents=True, exist_ok=True)
 
+        # Update custom executor's work_dir to match planning directory
+        # This ensures planning files are synced to the correct path on the frontend
+        if custom_executor is not None:
+            custom_executor.work_dir = str(planning_dir)
+
         start_time = time.time()
 
         planner_config = get_model_config(planner_model, api_keys)
@@ -224,11 +273,29 @@ def deep_research(
         # Now call display_cost without triggering the AttributeError
         cmbagent.display_cost()
 
+        # Sync planning cost file to frontend if using remote execution
+        if custom_executor is not None and 'cost_report_path' in cmbagent.final_context:
+            cost_path = cmbagent.final_context['cost_report_path']
+            if os.path.exists(cost_path):
+                with open(cost_path, 'r') as f:
+                    cost_content = f.read()
+                # Use planning_dir as base since executor.work_dir is planning_dir
+                rel_cost_path = os.path.relpath(cost_path, planning_dir)
+                custom_executor.send_file(rel_cost_path, cost_content)
+
         planning_output = copy.deepcopy(cmbagent.final_context)
 
         outfile = save_final_plan(planning_output, planning_dir)
         print(f"\nStructured plan written to {outfile}")
         print(f"\nPlanning took {execution_time_planning:.4f} seconds\n")
+
+        # Sync final plan to frontend if using remote execution
+        if custom_executor is not None and os.path.exists(outfile):
+            with open(outfile, 'r') as f:
+                plan_content = f.read()
+            # Use planning_dir as base since executor.work_dir is planning_dir
+            rel_plan_path = os.path.relpath(outfile, planning_dir)
+            custom_executor.send_file(rel_plan_path, plan_content)
 
         context_path = os.path.join(context_dir, "context_step_0.pkl")
         with open(context_path, 'wb') as f:
@@ -244,8 +311,12 @@ def deep_research(
         # Add timestamp
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         timing_path = os.path.join(planning_output['work_dir'], f"time/timing_report_planning_{timestamp}.json")
-        with open(timing_path, 'w') as f:
-            json.dump(timing_report, f, indent=2)
+        write_file_with_sync(
+            timing_path,
+            json.dumps(timing_report, indent=2),
+            str(planning_dir),  # Use planning_dir since executor.work_dir is planning_dir
+            custom_executor
+        )
 
         print(f"\nTiming report data saved to: {timing_path}\n")
 
@@ -265,6 +336,11 @@ def deep_research(
 
     control_dir = Path(work_dir).expanduser().resolve() / "control"
     control_dir.mkdir(parents=True, exist_ok=True)
+
+    # Update custom executor's work_dir to match the actual control directory
+    # This ensures files are synced to the correct Denario project path on the frontend
+    if custom_executor is not None:
+        custom_executor.work_dir = str(control_dir)
 
     current_context = copy.deepcopy(planning_output) if restart_at_step <= 0 else load_context(os.path.join(context_dir, f"context_step_{restart_at_step-1}.pkl"))
     number_of_steps_in_plan = current_context['number_of_steps_in_plan']
@@ -369,8 +445,12 @@ def deep_research(
         # Add timestamp
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         timing_path = os.path.join(current_context['work_dir'], f"time/timing_report_step_{step}_{timestamp}.json")
-        with open(timing_path, 'w') as f:
-            json.dump(timing_report, f, indent=2)
+        write_file_with_sync(
+            timing_path,
+            json.dumps(timing_report, indent=2),
+            str(control_dir),  # Use control_dir since executor.work_dir is control_dir
+            custom_executor
+        )
 
         print(f"\nTiming report data saved to: {timing_path}\n")
 
@@ -382,12 +462,25 @@ def deep_research(
         # Now call display_cost without triggering the AttributeError
         cmbagent.display_cost(name_append=f"step_{step}")
 
+        # Sync cost file to frontend if using remote execution
+        if custom_executor is not None and 'cost_report_path' in cmbagent.final_context:
+            cost_path = cmbagent.final_context['cost_report_path']
+            if os.path.exists(cost_path):
+                with open(cost_path, 'r') as f:
+                    cost_content = f.read()
+                # Use control_dir as base since executor.work_dir is control_dir
+                rel_cost_path = os.path.relpath(cost_path, control_dir)
+                custom_executor.send_file(rel_cost_path, cost_content)
+
         ## save the chat history and the final context
         chat_full_path = os.path.join(current_context['work_dir'], "chats")
-        os.makedirs(chat_full_path, exist_ok=True)
         chat_output_path = os.path.join(chat_full_path, f"chat_history_step_{step}.json")
-        with open(chat_output_path, 'w') as f:
-            json.dump(results['chat_history'], f, indent=2)
+        write_file_with_sync(
+            chat_output_path,
+            json.dumps(results['chat_history'], indent=2),
+            str(control_dir),  # Use control_dir since executor.work_dir is control_dir
+            custom_executor
+        )
 
         context_path = os.path.join(context_dir, f"context_step_{step}.pkl")
         with open(context_path, 'wb') as f:

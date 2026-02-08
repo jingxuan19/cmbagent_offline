@@ -1,4 +1,5 @@
 import os
+import re
 from cmbagent.base_agent import BaseAgent
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -177,6 +178,102 @@ class EngineerResponseFormatterAgent(BaseAgent):
             print("[_fix_indentation] Reached max attempts (" + str(max_attempts) + ") — returning best effort.")
             return code
 
+        @staticmethod
+        def _fix_data_paths(code: str, database_path: str = "data/") -> str:
+            """Fix incorrect data directory paths in generated code.
+
+            Engineers sometimes use hardcoded paths like "./data", "../data", or
+            inconsistent variations instead of the designated database_path.
+            This method scans the code and fixes these to ensure all data
+            operations use the correct, consistent path.
+
+            Parameters
+            ----------
+            code : str
+                The Python source code to check and fix.
+            database_path : str, optional
+                The correct data directory path (default "data/").
+
+            Returns
+            -------
+            str
+                The code with data paths fixed.
+            """
+            # Normalize database_path (ensure it doesn't have trailing slash for matching)
+            db_path_clean = database_path.rstrip("/")
+
+            # Track if any fixes were made
+            fixes_made = []
+
+            # Pattern 1: data_dir = "..." or data_dir = '...' assignments
+            # Matches variations like: data_dir = "./data", data_dir = "../data", data_dir="data"
+            data_dir_pattern = r'''(data_dir\s*=\s*)(['"])(\.{0,2}/?data/?)\2'''
+
+            def fix_data_dir(match):
+                prefix = match.group(1)
+                quote = match.group(2)
+                old_path = match.group(3)
+                if old_path.rstrip("/") != db_path_clean:
+                    fixes_made.append("data_dir assignment: " + repr(old_path) + " -> " + repr(database_path))
+                    return prefix + quote + database_path + quote
+                return match.group(0)
+
+            code = re.sub(data_dir_pattern, fix_data_dir, code)
+
+            # Pattern 2: Standalone path strings in os.path.join or open() calls
+            # Match patterns like: os.path.join("./data", ...) or open("../data/file.csv", ...)
+            path_in_call_pattern = r'''(os\.path\.join\s*\(\s*|open\s*\(\s*)(['"])(\.{1,2}/data)(/[^'"]*)?(\2)'''
+
+            def fix_path_in_call(match):
+                prefix = match.group(1)
+                quote = match.group(2)
+                bad_prefix = match.group(3)
+                rest = match.group(4) or ""
+                end_quote = match.group(5)
+                fixes_made.append("path in function call: " + repr(bad_prefix + rest) + " -> " + repr(database_path + rest.lstrip("/")))
+                return prefix + quote + database_path + rest.lstrip("/") + end_quote
+
+            code = re.sub(path_in_call_pattern, fix_path_in_call, code)
+
+            # Pattern 3: Direct string paths like "../data/" or "./data/" used in concatenation
+            # Match: + "../data/" + or + "./data/" +
+            concat_pattern = r'''(\+\s*)(['"])(\.{1,2}/data/?)(\2)(\s*\+)'''
+
+            def fix_concat_path(match):
+                pre_plus = match.group(1)
+                quote = match.group(2)
+                old_path = match.group(3)
+                end_quote = match.group(4)
+                post_plus = match.group(5)
+                fixes_made.append("concatenated path: " + repr(old_path) + " -> " + repr(database_path))
+                return pre_plus + quote + database_path + end_quote + post_plus
+
+            code = re.sub(concat_pattern, fix_concat_path, code)
+
+            # Pattern 4: Save/load paths starting with incorrect relative paths
+            # Match: savefig("./data/...", savefig("../data/..., np.save("./data/...
+            save_load_pattern = r'''(savefig|np\.save|np\.load|pd\.to_csv|pd\.read_csv|to_csv|read_csv|save|load)\s*\(\s*(['"])(\.{1,2}/data/)([^'"]+)\2'''
+
+            def fix_save_load(match):
+                func = match.group(1)
+                quote = match.group(2)
+                bad_prefix = match.group(3)
+                filename = match.group(4)
+                fixes_made.append(func + " path: " + repr(bad_prefix + filename) + " -> " + repr(database_path + filename))
+                return func + "(" + quote + database_path + filename + quote
+
+            code = re.sub(save_load_pattern, fix_save_load, code)
+
+            # Log fixes
+            if fixes_made:
+                print("[_fix_data_paths] Fixed " + str(len(fixes_made)) + " data path issue(s):")
+                for fix in fixes_made:
+                    print("  - " + fix)
+            else:
+                print("[_fix_data_paths] No data path issues found.")
+
+            return code
+
         def format(self) -> str:
             final_filename = self.filename if self.filename.endswith(".py") else self.filename + ".py"
 
@@ -208,6 +305,9 @@ class EngineerResponseFormatterAgent(BaseAgent):
 
             # Fix indentation errors introduced by LLM structured output
             updated_python_code = self._fix_indentation(updated_python_code)
+
+            # Fix incorrect data directory paths (e.g., "./data" -> "data/")
+            updated_python_code = self._fix_data_paths(updated_python_code)
 
             response_parts = [f"**Code Explanation:**\n\n{self.code_explanation}"]
 

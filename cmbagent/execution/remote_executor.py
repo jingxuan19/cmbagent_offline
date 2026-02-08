@@ -76,6 +76,18 @@ class RemoteWebSocketCodeExecutor(CodeExecutor):
         self._code_extractor = MarkdownCodeExtractor()
         self._pending: dict[str, PendingExecution] = {}
         self._main_loop: asyncio.AbstractEventLoop | None = None
+        # Plan step number (must be set by caller before each execution)
+        self._plan_step_number: int = 1
+
+    @property
+    def plan_step_number(self) -> int:
+        """Get the current plan step number for file naming."""
+        return self._plan_step_number
+
+    @plan_step_number.setter
+    def plan_step_number(self, value: int) -> None:
+        """Set the plan step number for file naming."""
+        self._plan_step_number = value
 
     def set_event_loop(self, loop: asyncio.AbstractEventLoop):
         """Set the main event loop for async operations."""
@@ -90,6 +102,11 @@ class RemoteWebSocketCodeExecutor(CodeExecutor):
     def work_dir(self) -> str:
         """Return the working directory."""
         return self._work_dir
+
+    @work_dir.setter
+    def work_dir(self, value: str) -> None:
+        """Update the working directory."""
+        self._work_dir = value
 
     @property
     def timeout(self) -> int:
@@ -121,6 +138,7 @@ class RemoteWebSocketCodeExecutor(CodeExecutor):
             "task_id": self._task_id,
             "work_dir": self._work_dir,
             "timeout": self._timeout,
+            "plan_step_number": self._plan_step_number,
             "code_blocks": [
                 {"code": block.code, "language": block.language}
                 for block in code_blocks
@@ -263,6 +281,59 @@ class RemoteWebSocketCodeExecutor(CodeExecutor):
             self.cancel_execution(execution_id)
         self._pending.clear()
         logger.info("Remote executor restarted")
+
+    def send_file(self, relative_path: str, content: str, encoding: str = "utf-8") -> bool:
+        """
+        Send a file to the frontend for writing.
+
+        This is used to sync metadata files (chats, timing, cost) to the frontend
+        when running in remote execution mode.
+
+        Args:
+            relative_path: Relative path within the work_dir (e.g., "chats/chat_step_1.json")
+            content: File content (string or base64 encoded for binary)
+            encoding: Either "utf-8" or "base64"
+
+        Returns:
+            True if the message was sent, False otherwise
+        """
+        request = {
+            "type": "write_file",
+            "path": relative_path,
+            "content": content,
+            "work_dir": self._work_dir,
+            "encoding": encoding,
+        }
+
+        try:
+            if self._main_loop and self._main_loop.is_running():
+                future = asyncio.run_coroutine_threadsafe(
+                    self._send_callback(request),
+                    self._main_loop
+                )
+                future.result(timeout=10)
+            else:
+                asyncio.run(self._send_callback(request))
+            logger.debug(f"Sent file {relative_path} to frontend")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to send file {relative_path}: {e}")
+            return False
+
+    def send_file_binary(self, relative_path: str, data: bytes) -> bool:
+        """
+        Send a binary file to the frontend.
+
+        Args:
+            relative_path: Relative path within the work_dir
+            data: Binary data to write
+
+        Returns:
+            True if sent, False otherwise
+        """
+        import base64
+        content = base64.b64encode(data).decode('ascii')
+        return self.send_file(relative_path, content, encoding="base64")
 
 
 class RemoteExecutorManager:
