@@ -13,7 +13,7 @@ def test_deep_research():
         task,
         max_rounds_control=100,
         n_plan_reviews=1,
-        max_n_attempts=2,
+        max_n_attempts=4,
         max_plan_steps=4,
         # engineer_model="gemini-3-flash-preview",
         # engineer_model="gemini-2.5-flash",

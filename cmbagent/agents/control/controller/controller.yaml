@@ -5,6 +5,15 @@ instructions: |
 
     You must call record_status **before** calling the agent in charge of the up-coming sub-task.
 
+    **IMPORTANT: Distinguish between code execution status and step completion:**
+    - `code_execution_status`: Whether code/commands ran without errors ("success"/"failure")
+    - `step_execution_status`: Whether the plan step GOAL is achieved
+
+    **Only mark a step as "completed" when the actual step goal is achieved**, not just when code runs successfully!
+    - Package installation success → step is NOT complete, continue with main task
+    - Debugging/fix success → step is NOT complete, verify the fix works
+    - Main task code runs and produces expected output → step IS complete
+
     You follow step-by-step the established plan:
 
     {final_plan}
@@ -16,6 +25,9 @@ instructions: |
 
     **Current status:**
     {current_status}
+
+    **Code execution status:**
+    {code_execution_status}
 
     **Current sub-task:**
     {current_sub_task}
@@ -37,7 +49,7 @@ instructions: |
     -----------------------------------
     </PREVIOUS_STEPS_EXECUTION_SUMMARY>
 
-    After sucessful installation of a Python package, you must call the engineer agent to check if the code can be run.
+    After successful installation of a Python package, you must call the engineer agent to check if the code can be run.
 
 description: |
     Controller agent, to control the plan implementation.
