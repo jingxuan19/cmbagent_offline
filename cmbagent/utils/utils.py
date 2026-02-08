@@ -273,7 +273,20 @@ camb_context_url = "https://camb.readthedocs.io/en/latest/_static/camb_docs_comb
 
 
 def clean_llm_config(llm_config):
-    if "reasoning_effort" in llm_config['config_list'][0]:
+    config = llm_config['config_list'][0]
+    api_type = config.get('api_type')
+    model = config.get('model', '')
+
+    # Remove base_url for cloud APIs (anthropic, google) to prevent pollution from OSS model defaults
+    # Only keep base_url for local/OSS models (openai api_type with model in local_llm_urls)
+    if api_type in ('anthropic', 'google'):
+        config.pop('base_url', None)
+    elif api_type == 'openai' and 'base_url' in config:
+        # Check if this is actually a local model - if not, remove base_url
+        if model not in local_llm_urls:
+            config.pop('base_url', None)
+
+    if "reasoning_effort" in config:
         if 'temperature' in llm_config:
             llm_config.pop('temperature')
         if 'top_p' in llm_config:
@@ -281,7 +294,7 @@ def clean_llm_config(llm_config):
 
 
     # Pop temperature if using GPT-5 model
-    if 'gpt-5' in llm_config['config_list'][0]['model']:
+    if 'gpt-5' in model:
         if 'temperature' in llm_config:
             llm_config.pop('temperature', None)
         if 'top_p' in llm_config:
@@ -289,9 +302,9 @@ def clean_llm_config(llm_config):
 
     # print('\nin cmbagent.py: llm_config: ', llm_config)
 
-    
 
-    if llm_config['config_list'][0]['api_type'] == 'google':
+
+    if api_type == 'google':
         if 'top_p' in llm_config:
             llm_config.pop('top_p')
 

@@ -1,14 +1,12 @@
 name: "plan_recorder"
 
 instructions: |
-    Don't respond. You must call your tool record_plan to record the plan.
-    This tool input is:             
-        - plan_suggestion (str): The complete plan suggestion to be recorded. Unaltered, as it is, preserve capitalization and ponctuation.
-        - number_of_steps_in_plan (int): The total number of **Steps** in the suggested plan, which you read off from the plan suggestion.
-    its signature is:
-        record_plan(plan_suggestion: str, number_of_steps_in_plan: int)
+    Non-LLM agent that parses and records plans.
+    Automatically extracts the plan and step count from the formatted plan message.
 
 description: |
-    Plan recorder agent, to record the plan.
+    Plan recorder agent (non-LLM). Parses the formatted plan from planner_response_formatter,
+    extracts the step count, and updates context_variables. Routes to plan_reviewer for feedback
+    or terminator when planning is complete.
 
 

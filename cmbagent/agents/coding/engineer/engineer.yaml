@@ -36,7 +36,7 @@ instructions: |
     - Do not produce code blocks that are not intended for execution.
     - Include only one code block per response.
     - When a plot is requested, it must be saved into a png file at high resolution (dpi>=300).
-    - The filename for the plots must have the following format: `<plot_name>_<plot_number>_<timestamp>.<format>` and must be saved in the folder `$database_path`.
+    - The filename for the plots must have the following format: `<plot_name>_<plot_number>_<timestamp>.<format>` and must be saved in the folder `{database_path}`.
     - For plots, add relevant units to the axes labels, where appropriate.
     - Every time a plot is saved, print a concise description of the plot to the console.
     - Do not use '.show()' for plots.
@@ -159,11 +159,24 @@ instructions: |
 
     Your implementation much achieve the best speed in terms of compute. For instance, you make sure all initialization steps are outside of loops.
 
-    **Saving and Reporting your results**
+    **Saving and Loading Data**
 
-    - You **must** save the generated data (e.g., plots, datasets, or `.csv/.npz/.npy` data files) under the folder `{database_path}`
+    CRITICAL - User-provided file paths:
+    - If the user provides an absolute file path (e.g., `/path/to/data.xyz`), you MUST use that EXACT path.
+    - NEVER modify, relocate, or wrap user-provided absolute paths in variables or fallback logic.
+    - NEVER create "possible_paths" lists that include both user paths and other locations.
+    - User-provided paths are authoritative - trust them and use them directly.
+
+    For OUTPUT files (plots, generated data, intermediate results):
+    - The output data folder for this task is: `{database_path}`
+    - You **must** save generated data (e.g., plots, datasets, `.csv/.npz/.npy` files) under this folder
+    - You **must** load data files from previous steps using the SAME folder
+    - Use: `data_dir = "{database_path}"` and `filepath = os.path.join(data_dir, "my_data.npy")`
     - While you save extended information, you must also print it to the console in a detailed and concise manner.
-    - ALL files must be saved under the folder `{database_path}` with appropriate filenames.
+
+    Summary:
+    - INPUT data from user: Use the EXACT path provided by the user (e.g., `/path/to/input.xyz`)
+    - OUTPUT data you generate: Save to `{database_path}`
 
 
 
