@@ -29,9 +29,15 @@ shared_context = {
     "current_plan_step_number": None,
     "current_sub_task": None,
     "agent_for_sub_task": None,
-    "current_status": None,
+    "current_status": None,  # Controller's view of step status: "in progress", "completed", "failed"
     "current_instructions": None,
     "previous_steps_execution_summary": "\n",
+
+    # Step vs Code execution status distinction:
+    # - code_execution_status: Result of running code/commands ("success"/"failure")
+    # - step_execution_status: Whether the plan step goal is achieved (only controller sets "completed")
+    "step_execution_status": "pending",  # "pending", "in_progress", "completed"
+    "code_execution_status": None,  # "success", "failure" - set by executor
 
     # =========================================================================
     # Agent Handoff Flags

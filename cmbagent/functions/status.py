@@ -40,6 +40,16 @@ def _update_context_variables(
     context_variables["current_instructions"] = current_instructions
     context_variables["current_status"] = current_status
 
+    # Update step_execution_status based on current_status
+    # Only the controller (via record_status) can mark a step as "completed"
+    if current_status == "completed":
+        context_variables["step_execution_status"] = "completed"
+    elif current_status == "in progress":
+        context_variables["step_execution_status"] = "in_progress"
+    # Reset code_execution_status when starting new work
+    if current_status == "in progress":
+        context_variables["code_execution_status"] = None
+
 
 def _load_codebase_info(cmbagent_instance, context_variables: ContextVariables) -> str:
     """Load and format docstrings from codebase."""
@@ -176,6 +186,9 @@ def _determine_next_agent_default(cmbagent_instance, context_variables: ContextV
 
 def _format_status_message(context_variables: ContextVariables, icon: str) -> str:
     """Format the status message."""
+    code_status = context_variables.get("code_execution_status", "N/A")
+    step_status = context_variables.get("step_execution_status", "pending")
+
     return f"""
 **Step number:** {context_variables["current_plan_step_number"]} out of {context_variables["number_of_steps_in_plan"]}.
 
@@ -187,7 +200,11 @@ def _format_status_message(context_variables: ContextVariables, icon: str) -> st
 
 {context_variables["current_instructions"]}
 
-**Status:** {context_variables["current_status"]} {icon}
+**Controller status:** {context_variables["current_status"]} {icon}
+
+**Code execution status:** {code_status}
+
+**Step execution status:** {step_status}
         """
 
 

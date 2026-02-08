@@ -14,7 +14,14 @@ def create_post_execution_transfer(controller, engineer, camb_context, installer
         execution_status: Literal["success", "failure"],
         fix_suggestion: Optional[str] = None
     ) -> ReplyResult:
-        """Transfer to the next agent based on execution status."""
+        """Transfer to the next agent based on execution status.
+
+        Note: execution_status is the CODE execution status (did the code run without errors).
+        This is different from step_execution_status (is the plan step goal achieved).
+        Only the controller should mark a step as complete.
+        """
+        # Store code execution status in context for controller to see
+        context_variables["code_execution_status"] = execution_status
 
         workflow_status_str = rf"""
 xxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -26,6 +33,10 @@ Plan step number: {context_variables["current_plan_step_number"]}
 Agent for sub-task (might be different from the next agent suggestion for debugging): {context_variables["agent_for_sub_task"]}
 
 Current status (before execution): {context_variables["current_status"]}
+
+Code execution status: {execution_status}
+
+Step execution status: {context_variables.get("step_execution_status", "in_progress")}
 
 xxxxxxxxxxxxxxxxxxxxxxxxxx
 """
@@ -41,9 +52,11 @@ xxxxxxxxxxxxxxxxxxxxxxxxxx
                 )
 
             if execution_status == "success":
+                # Code ran successfully - return to controller to decide if step is complete
+                # Note: This does NOT mean the step is complete, just that code executed without errors
                 return ReplyResult(
                     target=AgentTarget(controller),
-                    message="Execution status: " + execution_status + ". Transfer to controller.\n" + f"{workflow_status_str}\n",
+                    message="Code execution status: " + execution_status + ". Transfer to controller to evaluate step progress.\n" + f"{workflow_status_str}\n",
                     context_variables=context_variables
                 )
 
@@ -51,7 +64,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxx
                 context_variables["n_attempts"] += 1
                 return ReplyResult(
                     target=AgentTarget(engineer),
-                    message="Execution status: " + execution_status + ". Transfer to engineer.\n" + f"{workflow_status_str}\n" + f"Fix suggestion: {fix_suggestion}\n",
+                    message="Code execution status: " + execution_status + ". Transfer to engineer.\n" + f"{workflow_status_str}\n" + f"Fix suggestion: {fix_suggestion}\n",
                     context_variables=context_variables
                 )
 
@@ -59,7 +72,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxx
                 context_variables["n_attempts"] += 1
                 return ReplyResult(
                     target=AgentTarget(camb_context),
-                    message="Execution status: " + execution_status + ". Transfer to camb_context.\n" + f"{workflow_status_str}\n" + f"Fix suggestion: {fix_suggestion}\n",
+                    message="Code execution status: " + execution_status + ". Transfer to camb_context.\n" + f"{workflow_status_str}\n" + f"Fix suggestion: {fix_suggestion}\n",
                     context_variables=context_variables
                 )
 
@@ -67,7 +80,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxx
                 context_variables["n_attempts"] += 1
                 return ReplyResult(
                     target=AgentTarget(controller),
-                    message="Execution status: " + execution_status + ". Transfer to controller.\n" + f"{workflow_status_str}\n",
+                    message="Code execution status: " + execution_status + ". Transfer to controller.\n" + f"{workflow_status_str}\n",
                     context_variables=context_variables
                 )
 
@@ -75,7 +88,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxx
                 context_variables["n_attempts"] += 1
                 return ReplyResult(
                     target=AgentTarget(installer),
-                    message="Execution status: " + execution_status + ". Transfer to installer.\n" + f"{workflow_status_str}\n",
+                    message="Code execution status: " + execution_status + ". Transfer to installer.\n" + f"{workflow_status_str}\n",
                     context_variables=context_variables
                 )
         else:
