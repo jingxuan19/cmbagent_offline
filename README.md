@@ -11,7 +11,7 @@
     <img src="https://img.shields.io/badge/Discord-Join%20Chat-5865F2?logo=discord&logoColor=white&style=flat-square" alt="Join us on Discord" width="140"/>
 </a>
 
-Autonomous Research System, Powered by [AG2](https://github.com/ag2ai/ag2). Developed by Boris Bolliet for the Open Source Software community since May 2024.
+Autonomous Research System, Powered by [AG2](https://github.com/ag2ai/ag2). Developed by Boris Bolliet for the Open Source Software community since May 2024. Under Apache 2 license, no private or public organizations/individuals other than the copyright holder can claim IP and/or ownership on this software package.
 
 CMBAgent is a generalist multi-agent system for autonomous scientific research. Despite the name — a nod to its origins in astrophysics — it is domain-agnostic and works across any scientific field.
 
